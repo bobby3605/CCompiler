@@ -2,3 +2,5 @@
 dist-newstyle
 write_a_c_compiler
 *~
+src/#InputLexer.hs#
+src/.#InputLexer.hs

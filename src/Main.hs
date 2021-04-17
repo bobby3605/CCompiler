@@ -8,5 +8,5 @@ main :: IO ()
 main = do
   [args] <- getArgs
   file <- readFile args
-  print $ parse programParser "" "int main() { return 2; }"
+  print $ lexInput file 
 

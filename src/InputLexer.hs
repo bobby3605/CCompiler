@@ -11,14 +11,13 @@ lexInput input =
 symbolLexer :: Text.Parsec.Parsec String () String 
 symbolLexer = do
   spaces
-  output <- choice [many1 alphaNum,
-                           string ";" 
-                          ,string "{" 
-                          ,string "}" 
-                          ,string "(" 
-                          ,string ")"
-                           ]
-  return output
+  choice [many1 alphaNum
+         ,string ";" 
+         ,string "{" 
+         ,string "}" 
+         ,string "(" 
+         ,string ")"
+         ]
   
 wordToSymbol :: String -> Either Symbol String 
 wordToSymbol "{" = Left OpenBrace
