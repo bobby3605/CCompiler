@@ -15,5 +15,5 @@ main = do
   --print $ parseInput "int main() {return 2; }"
   --print file
 
-  -- print $ parse functionParser "" "int main() { return 2 + 2; }"
+  -- print $ parse functionParser "" "int main(){ 2 + 2 + 2; }"
   print $ parseInput file

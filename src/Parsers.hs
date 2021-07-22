@@ -110,7 +110,7 @@ addParser = do
   spaces <|> skipMany endOfLine
   string "+"
   spaces <|> skipMany endOfLine
-  num2 <- tokenParser
+  num2 <- try expressionParser <|> tokenParser
   return $ Add num1 num2
 
 subParser :: Text.Parsec.Parsec String () Expression
@@ -119,7 +119,7 @@ subParser = do
   spaces <|> skipMany endOfLine
   string "-"
   spaces <|> skipMany endOfLine
-  num2 <- tokenParser
+  num2 <- try expressionParser <|> tokenParser
   return $ Sub num1 num2
 
 mulParser :: Text.Parsec.Parsec String () Expression
@@ -128,7 +128,7 @@ mulParser = do
   spaces <|> skipMany endOfLine
   string "*"
   spaces <|> skipMany endOfLine
-  num2 <- tokenParser
+  num2 <- try expressionParser <|> tokenParser
   return $ Mul num1 num2
 
 divParser :: Text.Parsec.Parsec String () Expression
@@ -137,7 +137,7 @@ divParser = do
   spaces <|> skipMany endOfLine
   string "/"
   spaces <|> skipMany endOfLine
-  num2 <- tokenParser
+  num2 <- try expressionParser <|> tokenParser
   return $ Div num1 num2
 
 intLiteralParser :: Text.Parsec.Parsec String () Expression
