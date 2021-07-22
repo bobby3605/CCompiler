@@ -4,3 +4,5 @@ write_a_c_compiler
 *~
 src/#InputLexer.hs#
 src/.#InputLexer.hs
+TestFiles/a.out
+TestFiles/other.c
