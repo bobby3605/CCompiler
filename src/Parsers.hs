@@ -24,17 +24,32 @@ data Expression  =
   | Div Expression Expression
   deriving (Show)
 
+parseInput :: String -> Either ParseError Program
+parseInput = parse programParser ""
+
+programParser :: Text.Parsec.Parsec String () Program
+programParser = do
+  many1 functionParser
 
 functionParser :: Text.Parsec.Parsec String () Function
 functionParser = do
-  spaces
+  spaces <|> skipMany endOfLine
   returnType <- many1 alphaNum
-  spaces
+  spaces <|> skipMany endOfLine
   name <- many1 alphaNum
-  spaces
-  arguments <- many1 argumentParser
-  spaces
-  body <- many1 expressionParser
+  spaces <|> skipMany endOfLine
+  string "("
+  spaces <|> skipMany endOfLine
+  arguments <- many argumentParser
+  spaces <|> skipMany endOfLine
+  string ")"
+  spaces <|> skipMany endOfLine
+  string "{"
+  spaces <|> skipMany endOfLine
+  body <- many expressionParser
+  spaces <|> skipMany endOfLine
+  string "}"
+  spaces <|> skipMany endOfLine
   return $ Function { returnType = returnType
                     , name = name
                     , arguments = arguments
@@ -43,80 +58,110 @@ functionParser = do
 argumentParser :: Text.Parsec.Parsec String () (String,String)
 argumentParser = do
   argType <- many1 alphaNum
-  spaces
+  spaces <|> skipMany endOfLine
   argName <- many1 alphaNum
   return (argType, argName)
 
 expressionParser :: Text.Parsec.Parsec String () Expression
 expressionParser = do
-  choice [ intParser
-         , doubleParser
-         , floatParser
-         , stringParser
-         , charParser
-         , returnParser
-         , addParser
-         , subParser
-         , mulParser
-         , divParser
-         ]
+  spaces <|> skipMany endOfLine
+  notFollowedBy $ string "}"
+  emptyParser
+  <|> returnParser
+  <|> addParser
+  <|> subParser
+  <|> mulParser
+  <|> divParser
+  <|> intParser
+  <|> doubleParser
+  <|> floatParser
+  <|> stringParser
+  <|> charParser
+  <|> lookAhead intLiteralParser
 
+tokenParser :: Text.Parsec.Parsec String () Expression
+tokenParser = do
+  intLiteralParser
+  -- <|> parenthesesParser
+
+parenthesesParser :: Text.Parsec.Parsec String () Expression
+parenthesesParser = emptyParser
+
+endParser :: Text.Parsec.Parsec String () Expression
+endParser = do
+  string "}"
+  return $ String ""
+  
+emptyParser :: Text.Parsec.Parsec String () Expression
+emptyParser = do
+  notFollowedBy anyToken
+  return $ String ""
+  
 returnParser :: Text.Parsec.Parsec String () Expression
 returnParser = do
   string "return"
-  returnExpression <- manyTill anyToken $ string ";"
-  return $ Return (case parse expressionParser "" returnExpression of
-                     Left e -> Char $ head $ show e-- This should probably throw an error
-                     Right expr -> Return expr
-                     )
+  spaces <|> skipMany endOfLine
+  returnExpression <- expressionParser
+  return $ Return returnExpression
 
 addParser :: Text.Parsec.Parsec String () Expression
 addParser = do
-  num1 <- expressionParser
-  spaces
+  num1 <- tokenParser
+  spaces <|> skipMany endOfLine
   string "+"
-  spaces
-  num2 <- expressionParser
+  spaces <|> skipMany endOfLine
+  num2 <- tokenParser
   return $ Add num1 num2
 
 subParser :: Text.Parsec.Parsec String () Expression
 subParser = do
-  num1 <- expressionParser
-  spaces
+  num1 <- tokenParser
+  spaces <|> skipMany endOfLine
   string "-"
-  spaces
-  num2 <- expressionParser
+  spaces <|> skipMany endOfLine
+  num2 <- tokenParser
   return $ Sub num1 num2
 
 mulParser :: Text.Parsec.Parsec String () Expression
 mulParser = do
-  num1 <- expressionParser
-  spaces
+  num1 <- tokenParser
+  spaces <|> skipMany endOfLine
   string "*"
-  spaces
-  num2 <- expressionParser
+  spaces <|> skipMany endOfLine
+  num2 <- tokenParser
   return $ Mul num1 num2
 
 divParser :: Text.Parsec.Parsec String () Expression
 divParser = do
-  num1 <- expressionParser
-  spaces
+  num1 <- tokenParser
+  spaces <|> skipMany endOfLine
   string "/"
-  spaces
-  num2 <- expressionParser
+  spaces <|> skipMany endOfLine
+  num2 <- tokenParser
   return $ Div num1 num2
 
+intLiteralParser :: Text.Parsec.Parsec String () Expression
+intLiteralParser = do
+  -- many1 digit is consuming the input
+  num <- many1 digit
+  skipMany endOfLine
+  -- notFollowedBy $ string "." <|> string "+"
+  string " " <|> string ";"
+  spaces <|> skipMany endOfLine
+  return $ Integer (read num :: Integer)
+  
 intParser :: Text.Parsec.Parsec String () Expression
 intParser = do
   string "int"
-  spaces
+  spaces <|> skipMany endOfLine
+  -- Needs a noneOf $ string "."
   num <- manyTill digit (string ";" <|> string "." <|> string " ")
   return $ Integer (read num :: Integer)
 
 doubleParser :: Text.Parsec.Parsec String () Expression
 doubleParser = do
   string "double"
-  spaces
+  spaces <|> skipMany endOfLine
   num1 <- manyTill digit (string ".")
   num2 <- manyTill digit (string " " <|> string ";")
   return $ Double (read (num1 ++ "." ++ num2) :: Double)
@@ -124,7 +169,7 @@ doubleParser = do
 floatParser :: Text.Parsec.Parsec String () Expression
 floatParser = do
   string "float"
-  spaces
+  spaces <|> skipMany endOfLine
   num1 <- manyTill digit (string ".")
   num2 <- manyTill digit (string " " <|> string ";")
   return $ Float (read (num1 ++ "." ++ num2) :: Float)
