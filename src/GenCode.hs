@@ -91,9 +91,44 @@ logicalNegationCodeGen expr = helper expr
                      ++beginspaces++"mov"++"    "++"$0"++", "++"%rax"++"\n"
                      ++beginspaces++"sete"++"    "++"%al"++"\n"
 
+andCodeGen :: Expression -> Expression -> String
+andCodeGen expr1 expr2 =
+  helper1 expr1
+  ++"_andClause:"++"\n"
+  ++helper2 expr2
+  ++"_andClauseEnd:"++"\n"
+  where helper1 :: Expression -> String
+        helper1 expr = case matchCodeGen expr of
+          Right s -> genIns "mov" (Just ("$"++s)) "%rax"
+                   ++genIns "cmp" (Just "$0") "%rax"
+                   ++genIns "jne" Nothing "_andClause"
+                   ++genIns "jmp" Nothing "_andClauseEnd"
+          Left s -> s
+                   ++genIns "cmp" (Just "$0") "%rax"
+                   ++genIns "jne" Nothing "_andClause"
+                   ++genIns "jmp" Nothing "_andClauseEnd"
+        helper2 :: Expression -> String
+        helper2 expr = case matchCodeGen expr of
+          Right s -> genIns "mov" (Just ("$"++s)) "%rax"
+                   ++genIns "cmp" (Just "$0") "%rax"
+                   ++genIns "mov" (Just "$0") "%rax"
+                   ++genIns "setne" Nothing "%al"
+          Left s -> s
+                   ++genIns "cmp" (Just "$0") "%rax"
+                   ++genIns "mov" (Just "$0") "%rax"
+                   ++genIns "setne" Nothing "%al"
+
+genIns :: String -> Maybe String -> String -> String
+genIns ins (Just src) dst = beginspaces++ins++"    "++src++", "++dst++"\n"
+genIns ins Nothing dst = beginspaces++ins++"    "++dst++"\n"
+
 matchCodeGen :: Expression -> Either String String
 matchCodeGen (Return expr) = Right $ returnCodeGen expr
 matchCodeGen (Integer a) = Right $ show a
+matchCodeGen (Double a) = Right $ show a -- unimplemented
+matchCodeGen (Float a) = Right $ show a -- unimplemented
+matchCodeGen (String a) = Right $ show a -- unimplemented
+matchCodeGen (Char a) = Right $ show a -- unimplemented
 matchCodeGen (Add e1 e2) = Left $ addCodeGen e1 e2
 matchCodeGen (Sub e1 e2) = Left $ subCodeGen e1 e2
 matchCodeGen (Mul e1 e2) = Left $ mulCodeGen e1 e2
@@ -101,7 +136,16 @@ matchCodeGen (Div e1 e2) = Left $ divCodeGen e1 e2
 matchCodeGen (Negation expr) = Left $ negationCodeGen expr
 matchCodeGen (LogicalNegation expr) = Left $ logicalNegationCodeGen expr
 matchCodeGen (BitwiseComp expr) = Left $ bitwiseCompCodeGen expr
-
+matchCodeGen (And expr expr2) = Left $ andCodeGen expr expr2
+{--
+matchCodeGen (Or expr expr2) = Left $ orCodeGen expr expr2
+matchCodeGen (Equal expr expr2) = Left $ equalCodeGen expr expr2
+matchCodeGen (NotEqual expr expr2) = Left $ notEqualCodeGen expr expr2
+matchCodeGen (LessThan expr expr2) = Left $ lessThanCodeGen expr expr2
+matchCodeGen (LessThanOrEqual expr expr2) = Left $ lessThanOrEqualCodeGen expr expr2
+matchCodeGen (GreaterThan expr expr2) = Left $ greaterThanCodeGen expr expr2
+matchCodeGen (GreaterThanOrEqual expr expr2) = Left $ greaterThanOrEqualCodeGen expr expr2
+--}
 generate :: Program -> String
 generate = concatMap functionGenerator
 

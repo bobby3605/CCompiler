@@ -16,9 +16,9 @@ main = do
   --print $ parseInput "int main() {return 2; }"
   --print file
 
-  -- print $ parse functionParser "" "int main(){ 2 + 2 + 2; }"
+  --print $ parseInput "" "int main(){ 2 + 2 + 2; }"
   case parseInput file of
     Left e -> print e
-    Right p -> let output = generate p in
+    Right p -> print p >> let output = generate p in
       putStr output
       >> writeFile "basic.s" output

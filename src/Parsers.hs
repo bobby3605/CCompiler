@@ -1,4 +1,3 @@
-{-# LANGUAGE DataKinds #-}
 module Parsers where
 import Text.Parsec
 import Text.Parsec.Char
@@ -25,6 +24,14 @@ data Expression  =
   | Negation Expression
   | BitwiseComp Expression
   | LogicalNegation Expression
+  | And Expression Expression
+  | Or Expression Expression
+  | Equal Expression Expression
+  | NotEqual Expression Expression
+  | LessThan Expression Expression
+  | LessThanOrEqual Expression Expression
+  | GreaterThan Expression Expression
+  | GreaterThanOrEqual Expression Expression
   deriving (Show)
 
 parseInput :: String -> Either ParseError Program
@@ -78,6 +85,14 @@ expressionParser = do
   <|> try negationParser
   <|> try bitwiseComplementParser
   <|> try logicalNegationParser
+  <|> try andParser
+  <|> try orParser
+  <|> try equalParser
+  <|> try notEqualParser
+  <|> try lessThanParser
+  <|> try lessThanOrEqualParser
+  <|> try greaterThanParser
+  <|> try greaterThanOrEqualParser
   <|> intParser
   <|> doubleParser
   <|> floatParser
@@ -89,6 +104,78 @@ tokenParser :: Text.Parsec.Parsec String () Expression
 tokenParser = do
   intLiteralParser
   -- <|> parenthesesParser
+
+andParser :: Text.Parsec.Parsec String () Expression
+andParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string "&&"
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ And expr1 expr2
+
+orParser :: Text.Parsec.Parsec String () Expression
+orParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string "||"
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ Or expr1 expr2
+
+equalParser :: Text.Parsec.Parsec String () Expression
+equalParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string "=="
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ Equal expr1 expr2
+
+notEqualParser :: Text.Parsec.Parsec String () Expression
+notEqualParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string "!="
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ NotEqual expr1 expr2
+
+lessThanParser :: Text.Parsec.Parsec String () Expression
+lessThanParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string "<"
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ LessThan expr1 expr2
+
+lessThanOrEqualParser :: Text.Parsec.Parsec String () Expression
+lessThanOrEqualParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string "<="
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ LessThanOrEqual expr1 expr2
+
+greaterThanParser :: Text.Parsec.Parsec String () Expression
+greaterThanParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string ">"
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ GreaterThan expr1 expr2
+
+greaterThanOrEqualParser :: Text.Parsec.Parsec String () Expression
+greaterThanOrEqualParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string ">="
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ GreaterThanOrEqual expr1 expr2
 
 negationParser :: Text.Parsec.Parsec String () Expression
 negationParser = do
