@@ -6,3 +6,6 @@ src/#InputLexer.hs#
 src/.#InputLexer.hs
 TestFiles/a.out
 TestFiles/other.c
+TestFiles/basic.s
+a.out
+basic.s

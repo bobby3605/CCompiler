@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module Parsers where
 import Text.Parsec
 import Text.Parsec.Char
@@ -21,6 +22,9 @@ data Expression  =
   | Sub Expression Expression
   | Mul Expression Expression
   | Div Expression Expression
+  | Negation Expression
+  | BitwiseComp Expression
+  | LogicalNegation Expression
   deriving (Show)
 
 parseInput :: String -> Either ParseError Program
@@ -71,6 +75,9 @@ expressionParser = do
   <|> try subParser
   <|> try mulParser
   <|> try divParser
+  <|> try negationParser
+  <|> try bitwiseComplementParser
+  <|> try logicalNegationParser
   <|> intParser
   <|> doubleParser
   <|> floatParser
@@ -82,6 +89,27 @@ tokenParser :: Text.Parsec.Parsec String () Expression
 tokenParser = do
   intLiteralParser
   -- <|> parenthesesParser
+
+negationParser :: Text.Parsec.Parsec String () Expression
+negationParser = do
+  string "-"
+  spaces <|> skipMany endOfLine
+  expr <- try expressionParser <|> tokenParser
+  return $ Negation expr
+
+bitwiseComplementParser :: Text.Parsec.Parsec String () Expression
+bitwiseComplementParser = do
+  string "~"
+  spaces <|> skipMany endOfLine
+  expr <- try expressionParser <|> tokenParser
+  return $ BitwiseComp expr
+
+logicalNegationParser :: Text.Parsec.Parsec String () Expression
+logicalNegationParser = do
+  string "!"
+  spaces <|> skipMany endOfLine
+  expr <- try expressionParser <|> tokenParser
+  return $ LogicalNegation expr
 
 parenthesesParser :: Text.Parsec.Parsec String () Expression
 parenthesesParser = emptyParser
