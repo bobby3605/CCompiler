@@ -1,7 +1,6 @@
 module Parsers where
 import Text.Parsec
 import Text.Parsec.Char
-import InputLexer
 import Control.Monad
 
 type Program = [Function]
@@ -68,16 +67,16 @@ expressionParser = do
   notFollowedBy $ string "}"
   emptyParser
   <|> returnParser
-  <|> addParser
-  <|> subParser
-  <|> mulParser
-  <|> divParser
+  <|> try addParser
+  <|> try subParser
+  <|> try mulParser
+  <|> try divParser
   <|> intParser
   <|> doubleParser
   <|> floatParser
   <|> stringParser
   <|> charParser
-  <|> lookAhead intLiteralParser
+  <|> intLiteralParser
 
 tokenParser :: Text.Parsec.Parsec String () Expression
 tokenParser = do

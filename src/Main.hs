@@ -1,8 +1,9 @@
 module Main where
-import InputLexer 
 import Parsers
 import Text.Parsec
+import Text.Parsec.Char
 import System.Environment
+import GenCode
 
 main :: IO ()
 main = do
@@ -16,4 +17,8 @@ main = do
   --print file
 
   -- print $ parse functionParser "" "int main(){ 2 + 2 + 2; }"
-  print $ parseInput file
+  case parseInput file of
+    Left e -> print e
+    Right p -> let output = generate p in
+      putStr output
+      >> writeFile "basic.s" output

@@ -19,9 +19,7 @@ extra-source-files:  CHANGELOG.md
 executable Ccompiler
   main-is:             Main.hs
   hs-source-dirs:      src
-  other-modules:       Symbol
-                     , InputLexer
-                     , Parsers
+  other-modules:       Parsers
                      , GenCode
   -- other-extensions:
   build-depends:       base >=4.13, parsec
