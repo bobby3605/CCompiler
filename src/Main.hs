@@ -12,7 +12,7 @@ main = do
   --print $ parse expressionParser "" "2;"
   --print $ parse returnParser "" "return 2;"
   --print $ parse expressionParser "" ""
-  --print $ parse expressionParser "" "return 2;}"
+  --print $ parse expressionParser "" "1 + 2 && 3 + 4;"
   --print $ parseInput "int main() {return 2; }"
   --print file
 

@@ -123,29 +123,30 @@ genIns ins (Just src) dst = beginspaces++ins++"    "++src++", "++dst++"\n"
 genIns ins Nothing dst = beginspaces++ins++"    "++dst++"\n"
 
 matchCodeGen :: Expression -> Either String String
-matchCodeGen (Return expr) = Right $ returnCodeGen expr
-matchCodeGen (Integer a) = Right $ show a
-matchCodeGen (Double a) = Right $ show a -- unimplemented
-matchCodeGen (Float a) = Right $ show a -- unimplemented
-matchCodeGen (String a) = Right $ show a -- unimplemented
-matchCodeGen (Char a) = Right $ show a -- unimplemented
-matchCodeGen (Add e1 e2) = Left $ addCodeGen e1 e2
-matchCodeGen (Sub e1 e2) = Left $ subCodeGen e1 e2
-matchCodeGen (Mul e1 e2) = Left $ mulCodeGen e1 e2
-matchCodeGen (Div e1 e2) = Left $ divCodeGen e1 e2
-matchCodeGen (Negation expr) = Left $ negationCodeGen expr
-matchCodeGen (LogicalNegation expr) = Left $ logicalNegationCodeGen expr
-matchCodeGen (BitwiseComp expr) = Left $ bitwiseCompCodeGen expr
-matchCodeGen (And expr expr2) = Left $ andCodeGen expr expr2
+matchCodeGen (Uop Return expr) = Right $ returnCodeGen expr
+matchCodeGen (Token (Integer a)) = Right $ show a
+matchCodeGen (Token (Double a)) = Right $ show a -- unimplemented
+matchCodeGen (Token (Float a)) = Right $ show a -- unimplemented
+matchCodeGen (Token (String a)) = Right $ show a -- unimplemented
+matchCodeGen (Token (Char a)) = Right $ show a -- unimplemented
+matchCodeGen (Bop Add e1 e2) = Left $ addCodeGen e1 e2
+matchCodeGen (Bop Sub e1 e2) = Left $ subCodeGen e1 e2
+matchCodeGen (Bop Mul e1 e2) = Left $ mulCodeGen e1 e2
+matchCodeGen (Bop Div e1 e2) = Left $ divCodeGen e1 e2
+matchCodeGen (Uop Negation expr) = Left $ negationCodeGen expr
+matchCodeGen (Uop LogicalNegation expr) = Left $ logicalNegationCodeGen expr
+matchCodeGen (Uop BitwiseComp expr) = Left $ bitwiseCompCodeGen expr
+matchCodeGen (Bop And expr expr2) = Left $ andCodeGen expr expr2
 {--
-matchCodeGen (Or expr expr2) = Left $ orCodeGen expr expr2
-matchCodeGen (Equal expr expr2) = Left $ equalCodeGen expr expr2
-matchCodeGen (NotEqual expr expr2) = Left $ notEqualCodeGen expr expr2
-matchCodeGen (LessThan expr expr2) = Left $ lessThanCodeGen expr expr2
-matchCodeGen (LessThanOrEqual expr expr2) = Left $ lessThanOrEqualCodeGen expr expr2
-matchCodeGen (GreaterThan expr expr2) = Left $ greaterThanCodeGen expr expr2
-matchCodeGen (GreaterThanOrEqual expr expr2) = Left $ greaterThanOrEqualCodeGen expr expr2
+matchCodeGen (Bop Or expr expr2) = Left $ orCodeGen expr expr2
+matchCodeGen (Bop Equal expr expr2) = Left $ equalCodeGen expr expr2
+matchCodeGen (Bop NotEqual expr expr2) = Left $ notEqualCodeGen expr expr2
+matchCodeGen (Bop LessThan expr expr2) = Left $ lessThanCodeGen expr expr2
+matchCodeGen (Bop LessThanOrEqual expr expr2) = Left $ lessThanOrEqualCodeGen expr expr2
+matchCodeGen (Bop GreaterThan expr expr2) = Left $ greaterThanCodeGen expr expr2
+matchCodeGen (Bop GreaterThanOrEqual expr expr2) = Left $ greaterThanOrEqualCodeGen expr expr2
 --}
+
 generate :: Program -> String
 generate = concatMap functionGenerator
 

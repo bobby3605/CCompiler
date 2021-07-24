@@ -10,29 +10,64 @@ data Function = Function { returnType :: String
                          ,body :: [Expression]
                          } deriving (Show)
 
-data Expression  =
+data Bop =
+    Add
+  | Sub
+  | Mul
+  | Div
+  | And
+  | Or
+  | Equal
+  | NotEqual
+  | LessThan
+  | LessThanOrEqual
+  | GreaterThan
+  | GreaterThanOrEqual
+  deriving (Show)
+
+data Uop =
+    Return
+  | Negation
+  | LogicalNegation
+  | BitwiseComp
+  deriving (Show)
+
+data Token =
     Integer Integer
   | Double Double
   | Float Float
-  | String String
   | Char Char
-  | Return Expression
-  | Add Expression Expression 
-  | Sub Expression Expression
-  | Mul Expression Expression
-  | Div Expression Expression
-  | Negation Expression
-  | BitwiseComp Expression
-  | LogicalNegation Expression
-  | And Expression Expression
-  | Or Expression Expression
-  | Equal Expression Expression
-  | NotEqual Expression Expression
-  | LessThan Expression Expression
-  | LessThanOrEqual Expression Expression
-  | GreaterThan Expression Expression
-  | GreaterThanOrEqual Expression Expression
+  | String String
   deriving (Show)
+
+data Expression =
+    Bop Bop Expression Expression
+  | Uop Uop Expression
+  | Token Token
+  deriving (Show)
+
+precedenceOfOperator :: Expression -> Integer
+precedenceOfOperator (Uop Negation _)             = 0
+precedenceOfOperator (Uop BitwiseComp _)          = 0
+precedenceOfOperator (Uop LogicalNegation _)      = 0
+precedenceOfOperator (Token (Integer _))          = 1
+precedenceOfOperator (Token (Double _))           = 1
+precedenceOfOperator (Token (Float _))            = 1
+precedenceOfOperator (Token (String _))           = 1
+precedenceOfOperator (Token (Char _))             = 1
+precedenceOfOperator (Bop Add _ _)                = 2
+precedenceOfOperator (Bop Sub _ _)                = 2
+precedenceOfOperator (Bop Mul _ _)                = 2
+precedenceOfOperator (Bop Div _ _)                = 2
+precedenceOfOperator (Bop And _ _)                = 3
+precedenceOfOperator (Bop Or _ _)                 = 3
+precedenceOfOperator (Bop Equal _ _)              = 3
+precedenceOfOperator (Bop NotEqual _ _)           = 3
+precedenceOfOperator (Bop LessThan _ _)           = 3
+precedenceOfOperator (Bop LessThanOrEqual _ _)    = 3
+precedenceOfOperator (Bop GreaterThan _ _)        = 3
+precedenceOfOperator (Bop GreaterThanOrEqual _ _) = 3
+precedenceOfOperator (Uop Return _)               = 10
 
 parseInput :: String -> Either ParseError Program
 parseInput = parse programParser ""
@@ -112,7 +147,7 @@ andParser = do
   string "&&"
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ And expr1 expr2
+  return $ Bop And expr1 expr2
 
 orParser :: Text.Parsec.Parsec String () Expression
 orParser = do
@@ -121,7 +156,7 @@ orParser = do
   string "||"
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ Or expr1 expr2
+  return $ Bop Or expr1 expr2
 
 equalParser :: Text.Parsec.Parsec String () Expression
 equalParser = do
@@ -130,7 +165,7 @@ equalParser = do
   string "=="
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ Equal expr1 expr2
+  return $ Bop Equal expr1 expr2
 
 notEqualParser :: Text.Parsec.Parsec String () Expression
 notEqualParser = do
@@ -139,7 +174,7 @@ notEqualParser = do
   string "!="
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ NotEqual expr1 expr2
+  return $ Bop NotEqual expr1 expr2
 
 lessThanParser :: Text.Parsec.Parsec String () Expression
 lessThanParser = do
@@ -148,7 +183,7 @@ lessThanParser = do
   string "<"
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ LessThan expr1 expr2
+  return $ Bop LessThan expr1 expr2
 
 lessThanOrEqualParser :: Text.Parsec.Parsec String () Expression
 lessThanOrEqualParser = do
@@ -157,7 +192,7 @@ lessThanOrEqualParser = do
   string "<="
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ LessThanOrEqual expr1 expr2
+  return $ Bop LessThanOrEqual expr1 expr2
 
 greaterThanParser :: Text.Parsec.Parsec String () Expression
 greaterThanParser = do
@@ -166,7 +201,7 @@ greaterThanParser = do
   string ">"
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ GreaterThan expr1 expr2
+  return $ Bop GreaterThan expr1 expr2
 
 greaterThanOrEqualParser :: Text.Parsec.Parsec String () Expression
 greaterThanOrEqualParser = do
@@ -175,28 +210,28 @@ greaterThanOrEqualParser = do
   string ">="
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ GreaterThanOrEqual expr1 expr2
+  return $ Bop GreaterThanOrEqual expr1 expr2
 
 negationParser :: Text.Parsec.Parsec String () Expression
 negationParser = do
   string "-"
   spaces <|> skipMany endOfLine
   expr <- try expressionParser <|> tokenParser
-  return $ Negation expr
+  return $ Uop Negation expr
 
 bitwiseComplementParser :: Text.Parsec.Parsec String () Expression
 bitwiseComplementParser = do
   string "~"
   spaces <|> skipMany endOfLine
   expr <- try expressionParser <|> tokenParser
-  return $ BitwiseComp expr
+  return $ Uop BitwiseComp expr
 
 logicalNegationParser :: Text.Parsec.Parsec String () Expression
 logicalNegationParser = do
   string "!"
   spaces <|> skipMany endOfLine
   expr <- try expressionParser <|> tokenParser
-  return $ LogicalNegation expr
+  return $ Uop LogicalNegation expr
 
 parenthesesParser :: Text.Parsec.Parsec String () Expression
 parenthesesParser = emptyParser
@@ -204,19 +239,19 @@ parenthesesParser = emptyParser
 endParser :: Text.Parsec.Parsec String () Expression
 endParser = do
   string "}"
-  return $ String ""
+  return $ Token $ String ""
   
 emptyParser :: Text.Parsec.Parsec String () Expression
 emptyParser = do
   notFollowedBy anyToken
-  return $ String ""
+  return $ Token $ String ""
   
 returnParser :: Text.Parsec.Parsec String () Expression
 returnParser = do
   string "return"
   spaces <|> skipMany endOfLine
   returnExpression <- expressionParser
-  return $ Return returnExpression
+  return $ Uop Return returnExpression
 
 -- i don't think these respect PEMDAS
 addParser :: Text.Parsec.Parsec String () Expression
@@ -226,7 +261,35 @@ addParser = do
   string "+"
   spaces <|> skipMany endOfLine
   num2 <- try expressionParser <|> tokenParser
-  return $ Add num1 num2
+  return $ operatorPrecedenceFix (Bop Add num1 num2)
+
+-- if precedence of expressionParser output is greater than addParser, make addParser a sub expression of expressionParser output
+-- Add num1 (And num2 (Add num3 num4))
+-- And (Add num1 num2) (Add num3 num4)
+-- expr1 from And becomes Expr2 of the first Add
+-- The new first Add becomes expr1 of And
+-- expr2 from And stays
+-- Otherwise, make the Expression normally
+
+operatorPrecedenceFix :: Expression -> Expression
+operatorPrecedenceFix (Bop currOp num1 num2) =
+  if precedenceOfOperator num2 > precedenceOfOperator (Bop currOp num1 num2) then
+    case num2 of
+      Bop nextOp expr1 expr2 -> Bop nextOp (Bop currOp num1 expr1) expr2
+      a -> error $ "operatorPrecedenceFix error: " ++ show a
+  else
+    Bop currOp num1 num2
+
+{--
+operatorPrecedenceFix :: Expression -> Expression
+operatorPrecedenceFix (currExpr num1 num2) =
+  if precedenceOfOperator num2 > precedenceOfOperator (currExpr num1 num2) then
+    case num2 of
+      nextExpr expr1 expr2 -> nextExpr (currExpr num1 expr1) expr2
+      a -> error $ "operatorPrecedenceFix error: " ++ show a
+  else
+    currExpr num1 num2
+--}
 
 subParser :: Text.Parsec.Parsec String () Expression
 subParser = do
@@ -235,7 +298,7 @@ subParser = do
   string "-"
   spaces <|> skipMany endOfLine
   num2 <- try expressionParser <|> tokenParser
-  return $ Sub num1 num2
+  return $ Bop Sub num1 num2
 
 mulParser :: Text.Parsec.Parsec String () Expression
 mulParser = do
@@ -244,7 +307,7 @@ mulParser = do
   string "*"
   spaces <|> skipMany endOfLine
   num2 <- try expressionParser <|> tokenParser
-  return $ Mul num1 num2
+  return $ Bop Mul num1 num2
 
 divParser :: Text.Parsec.Parsec String () Expression
 divParser = do
@@ -253,7 +316,7 @@ divParser = do
   string "/"
   spaces <|> skipMany endOfLine
   num2 <- try expressionParser <|> tokenParser
-  return $ Div num1 num2
+  return $ Bop Div num1 num2
 
 intLiteralParser :: Text.Parsec.Parsec String () Expression
 intLiteralParser = do
@@ -263,7 +326,7 @@ intLiteralParser = do
   -- notFollowedBy $ string "." <|> string "+"
   string " " <|> string ";"
   spaces <|> skipMany endOfLine
-  return $ Integer (read num :: Integer)
+  return $  Token $ Integer (read num :: Integer)
   
 intParser :: Text.Parsec.Parsec String () Expression
 intParser = do
@@ -271,7 +334,7 @@ intParser = do
   spaces <|> skipMany endOfLine
   -- Needs a noneOf $ string "."
   num <- manyTill digit (string ";" <|> string "." <|> string " ")
-  return $ Integer (read num :: Integer)
+  return $ Token $ Integer (read num :: Integer)
 
 doubleParser :: Text.Parsec.Parsec String () Expression
 doubleParser = do
@@ -279,7 +342,7 @@ doubleParser = do
   spaces <|> skipMany endOfLine
   num1 <- manyTill digit (string ".")
   num2 <- manyTill digit (string " " <|> string ";")
-  return $ Double (read (num1 ++ "." ++ num2) :: Double)
+  return $ Token $ Double (read (num1 ++ "." ++ num2) :: Double)
 
 floatParser :: Text.Parsec.Parsec String () Expression
 floatParser = do
@@ -287,18 +350,17 @@ floatParser = do
   spaces <|> skipMany endOfLine
   num1 <- manyTill digit (string ".")
   num2 <- manyTill digit (string " " <|> string ";")
-  return $ Float (read (num1 ++ "." ++ num2) :: Float)
+  return $ Token $ Float (read (num1 ++ "." ++ num2) :: Float)
 
 -- TODO: add support for escape characters
 stringParser :: Text.Parsec.Parsec String () Expression
 stringParser = do
   oneOf "\""
   s <- manyTill anyToken (string "\"")
-  return $ String s
+  return $ Token $ String s
 
 charParser :: Text.Parsec.Parsec String () Expression
 charParser = do
   oneOf "'"
   c <- anyToken
-  return $ Char c
-  
+  return $ Token $ Char c
