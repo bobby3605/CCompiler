@@ -131,6 +131,7 @@ returnParser = do
   returnExpression <- expressionParser
   return $ Return returnExpression
 
+-- i don't think these respect PEMDAS
 addParser :: Text.Parsec.Parsec String () Expression
 addParser = do
   num1 <- tokenParser
