@@ -280,17 +280,6 @@ operatorPrecedenceFix (Bop currOp num1 num2) =
   else
     Bop currOp num1 num2
 
-{--
-operatorPrecedenceFix :: Expression -> Expression
-operatorPrecedenceFix (currExpr num1 num2) =
-  if precedenceOfOperator num2 > precedenceOfOperator (currExpr num1 num2) then
-    case num2 of
-      nextExpr expr1 expr2 -> nextExpr (currExpr num1 expr1) expr2
-      a -> error $ "operatorPrecedenceFix error: " ++ show a
-  else
-    currExpr num1 num2
---}
-
 subParser :: Text.Parsec.Parsec String () Expression
 subParser = do
   num1 <- tokenParser
