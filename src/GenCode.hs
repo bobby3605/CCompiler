@@ -60,6 +60,37 @@ divCodeGen e1 e2 =
           Right s -> genmov ("$"++s) "rax"
           Left s -> s
 
+negationCodeGen :: Expression -> String
+negationCodeGen expr = helper expr
+  where helper :: Expression -> String
+        helper expr = case matchCodeGen expr of
+          Right s -> genmov ("$"++s) "rax"++
+                      beginspaces++"neg"++"     "++"%rax"++"\n"
+          Left s -> s
+                    ++beginspaces++"neg"++"     "++"%rax"++"\n"
+
+bitwiseCompCodeGen :: Expression -> String
+bitwiseCompCodeGen expr = helper expr
+  where helper :: Expression -> String
+        helper expr = case matchCodeGen expr of
+          Right s -> genmov ("$"++s) "rax"++
+                      beginspaces++"not"++"     "++"%rax"++"\n"
+          Left s -> s
+                    ++beginspaces++"not"++"     "++"%rax"++"\n"
+
+logicalNegationCodeGen :: Expression -> String
+logicalNegationCodeGen expr = helper expr
+  where helper :: Expression -> String
+        helper expr = case matchCodeGen expr of
+          Right s -> genmov ("$"++s) "rax"
+                     ++beginspaces++"cmp"++"    "++"$0"++", "++"%rax"++"\n"
+                     ++beginspaces++"mov"++"    "++"$0"++", "++"%rax"++"\n"
+                     ++beginspaces++"sete"++"    "++"%al"++"\n"
+          Left s -> s
+                    ++beginspaces++"cmp"++"    "++"$0"++", "++"%rax"++"\n"
+                     ++beginspaces++"mov"++"    "++"$0"++", "++"%rax"++"\n"
+                     ++beginspaces++"sete"++"    "++"%al"++"\n"
+
 matchCodeGen :: Expression -> Either String String
 matchCodeGen (Return expr) = Right $ returnCodeGen expr
 matchCodeGen (Integer a) = Right $ show a
@@ -67,6 +98,9 @@ matchCodeGen (Add e1 e2) = Left $ addCodeGen e1 e2
 matchCodeGen (Sub e1 e2) = Left $ subCodeGen e1 e2
 matchCodeGen (Mul e1 e2) = Left $ mulCodeGen e1 e2
 matchCodeGen (Div e1 e2) = Left $ divCodeGen e1 e2
+matchCodeGen (Negation expr) = Left $ negationCodeGen expr
+matchCodeGen (LogicalNegation expr) = Left $ logicalNegationCodeGen expr
+matchCodeGen (BitwiseComp expr) = Left $ bitwiseCompCodeGen expr
 
 generate :: Program -> String
 generate = concatMap functionGenerator
