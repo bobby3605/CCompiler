@@ -152,15 +152,15 @@ assignVariableCodeGen :: String -> Expression -> State VariableMap String
 assignVariableCodeGen varName varValue = do
   inputMap <- get
   case getVariableLocation varName inputMap of
-    Just varLocation -> codeGenStateHelper varValue $ genIns "mov" (Just "%rax") (show varLocation++"%rbp")
-    Nothing -> return $ error "Variable not found: " ++ varName
+    Just varLocation -> codeGenStateHelper varValue $ genIns "mov" (Just "%rax") (show varLocation++"(%rbp)")
+    Nothing -> return $ error $ "Variable not found: " ++ varName
 
 getVariableCodeGen :: String -> State VariableMap String
 getVariableCodeGen varName = do
   inputMap <- get
   case getVariableLocation varName inputMap of
       Just varLocation -> return $ genIns "mov" (Just (show varLocation++"(%rbp)")) "%rax"
-      Nothing -> return $ error "Variable not found: " ++ varName
+      Nothing -> return $ error $ "Variable not found: " ++ varName
 
 genIns :: String -> Maybe String -> String -> String
 genIns ins (Just src) dst = beginspaces++ins++"    "++src++", "++dst++"\n"

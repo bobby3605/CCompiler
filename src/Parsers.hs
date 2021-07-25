@@ -402,7 +402,7 @@ intLiteralParser = do
 
 variableParser :: Text.Parsec.Parsec String () Expression
 variableParser =
-  try variableDeclare <|> try variableAssignAndDeclare
+  try variableAssign <|> try variableDeclare <|> try variableAssignAndDeclare
   where variableDeclare :: Text.Parsec.Parsec String () Expression
   -- int a; declare
   -- declareCodeGen with Nothing
@@ -412,6 +412,7 @@ variableParser =
           variableName <- many1 letter
           spaces <|> skipMany endOfLine
           string ";"
+          spaces <|> skipMany endOfLine
           return $ DeclareVariable variableName variableType Nothing
         variableAssignAndDeclare :: Text.Parsec.Parsec String () Expression
   -- int a = 1; assign and declare
