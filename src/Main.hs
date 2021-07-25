@@ -11,7 +11,7 @@ main = do
   file <- readFile args
   --print $ parse expressionParser "" "2;"
   --print $ parse returnParser "" "return 2;"
-  --print $ parse expressionParser "" ""
+  --print $ parse expressionParser "" "int a = 1;"
   --print $ parse expressionParser "" "1 + 2 && 3 + 4;"
   --print $ parseInput "int main() {return 2; }"
   --print file

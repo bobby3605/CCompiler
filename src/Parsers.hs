@@ -23,6 +23,13 @@ data Bop =
   | LessThanOrEqual
   | GreaterThan
   | GreaterThanOrEqual
+  | Modulo
+  | BitwiseAnd
+  | BitwiseOr
+  | BitwiseXor
+  | BitwiseShiftLeft
+  | BitwiseShiftRight
+  | AssignVariable
   deriving (Show)
 
 data Uop =
@@ -30,6 +37,7 @@ data Uop =
   | Negation
   | LogicalNegation
   | BitwiseComp
+  | DeclareVariable
   deriving (Show)
 
 data Token =
@@ -38,6 +46,7 @@ data Token =
   | Float Float
   | Char Char
   | String String
+  | Variable String
   deriving (Show)
 
 data Expression =
@@ -55,6 +64,7 @@ precedenceOfOperator (Token (Double _))           = 1
 precedenceOfOperator (Token (Float _))            = 1
 precedenceOfOperator (Token (String _))           = 1
 precedenceOfOperator (Token (Char _))             = 1
+precedenceOfOperator (Token (Variable _))         = 1
 precedenceOfOperator (Bop Add _ _)                = 2
 precedenceOfOperator (Bop Sub _ _)                = 2
 precedenceOfOperator (Bop Mul _ _)                = 2
@@ -67,6 +77,14 @@ precedenceOfOperator (Bop LessThan _ _)           = 3
 precedenceOfOperator (Bop LessThanOrEqual _ _)    = 3
 precedenceOfOperator (Bop GreaterThan _ _)        = 3
 precedenceOfOperator (Bop GreaterThanOrEqual _ _) = 3
+precedenceOfOperator (Bop Modulo _ _)             = 4
+precedenceOfOperator (Bop BitwiseAnd _ _)         = 4
+precedenceOfOperator (Bop BitwiseOr _ _)          = 4
+precedenceOfOperator (Bop BitwiseXor _ _)         = 4
+precedenceOfOperator (Bop BitwiseShiftLeft _ _)   = 4
+precedenceOfOperator (Bop BitwiseShiftRight _ _)  = 4
+precedenceOfOperator (Uop DeclareVariable _)      = 0
+precedenceOfOperator (Bop AssignVariable _ _)     = 9
 precedenceOfOperator (Uop Return _)               = 10
 
 parseInput :: String -> Either ParseError Program
@@ -128,11 +146,13 @@ expressionParser = do
   <|> try lessThanOrEqualParser
   <|> try greaterThanParser
   <|> try greaterThanOrEqualParser
-  <|> intParser
-  <|> doubleParser
-  <|> floatParser
-  <|> stringParser
-  <|> charParser
+  <|> try moduloParser
+  <|> try bitwiseAndParser
+  <|> try bitwiseOrParser
+  <|> try bitwiseXorParser
+  <|> try bitwiseShiftLeftParser
+  <|> try bitwiseShiftRightParser
+  <|> try variableParser
   <|> intLiteralParser
 
 tokenParser :: Text.Parsec.Parsec String () Expression
@@ -147,7 +167,7 @@ andParser = do
   string "&&"
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ Bop And expr1 expr2
+  return $ operatorPrecedenceFix (Bop And expr1 expr2)
 
 orParser :: Text.Parsec.Parsec String () Expression
 orParser = do
@@ -156,7 +176,7 @@ orParser = do
   string "||"
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ Bop Or expr1 expr2
+  return $ operatorPrecedenceFix (Bop Or expr1 expr2)
 
 equalParser :: Text.Parsec.Parsec String () Expression
 equalParser = do
@@ -165,7 +185,7 @@ equalParser = do
   string "=="
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ Bop Equal expr1 expr2
+  return $ operatorPrecedenceFix (Bop Equal expr1 expr2)
 
 notEqualParser :: Text.Parsec.Parsec String () Expression
 notEqualParser = do
@@ -174,7 +194,7 @@ notEqualParser = do
   string "!="
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ Bop NotEqual expr1 expr2
+  return $ operatorPrecedenceFix (Bop NotEqual expr1 expr2)
 
 lessThanParser :: Text.Parsec.Parsec String () Expression
 lessThanParser = do
@@ -183,7 +203,7 @@ lessThanParser = do
   string "<"
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ Bop LessThan expr1 expr2
+  return $ operatorPrecedenceFix (Bop LessThan expr1 expr2)
 
 lessThanOrEqualParser :: Text.Parsec.Parsec String () Expression
 lessThanOrEqualParser = do
@@ -192,7 +212,7 @@ lessThanOrEqualParser = do
   string "<="
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ Bop LessThanOrEqual expr1 expr2
+  return $ operatorPrecedenceFix (Bop LessThanOrEqual expr1 expr2)
 
 greaterThanParser :: Text.Parsec.Parsec String () Expression
 greaterThanParser = do
@@ -201,7 +221,7 @@ greaterThanParser = do
   string ">"
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ Bop GreaterThan expr1 expr2
+  return $ operatorPrecedenceFix (Bop GreaterThan expr1 expr2)
 
 greaterThanOrEqualParser :: Text.Parsec.Parsec String () Expression
 greaterThanOrEqualParser = do
@@ -210,7 +230,7 @@ greaterThanOrEqualParser = do
   string ">="
   spaces <|> skipMany endOfLine
   expr2 <- try expressionParser <|> tokenParser
-  return $ Bop GreaterThanOrEqual expr1 expr2
+  return $ operatorPrecedenceFix (Bop GreaterThanOrEqual expr1 expr2)
 
 negationParser :: Text.Parsec.Parsec String () Expression
 negationParser = do
@@ -225,6 +245,60 @@ bitwiseComplementParser = do
   spaces <|> skipMany endOfLine
   expr <- try expressionParser <|> tokenParser
   return $ Uop BitwiseComp expr
+
+moduloParser :: Text.Parsec.Parsec String () Expression
+moduloParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string "%"
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ operatorPrecedenceFix (Bop Modulo expr1 expr2)
+
+bitwiseAndParser :: Text.Parsec.Parsec String () Expression
+bitwiseAndParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string "&"
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ operatorPrecedenceFix (Bop BitwiseAnd expr1 expr2)
+
+bitwiseOrParser :: Text.Parsec.Parsec String () Expression
+bitwiseOrParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string "|"
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ operatorPrecedenceFix (Bop BitwiseOr expr1 expr2)
+
+bitwiseXorParser :: Text.Parsec.Parsec String () Expression
+bitwiseXorParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string "^"
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ operatorPrecedenceFix (Bop BitwiseXor expr1 expr2)
+
+bitwiseShiftLeftParser :: Text.Parsec.Parsec String () Expression
+bitwiseShiftLeftParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string "<<"
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ operatorPrecedenceFix (Bop BitwiseShiftLeft expr1 expr2)
+
+bitwiseShiftRightParser :: Text.Parsec.Parsec String () Expression
+bitwiseShiftRightParser = do
+  expr1 <- tokenParser
+  spaces <|> skipMany endOfLine
+  string ">>"
+  spaces <|> skipMany endOfLine
+  expr2 <- try expressionParser <|> tokenParser
+  return $ operatorPrecedenceFix (Bop BitwiseShiftRight expr1 expr2)
 
 logicalNegationParser :: Text.Parsec.Parsec String () Expression
 logicalNegationParser = do
@@ -287,7 +361,7 @@ subParser = do
   string "-"
   spaces <|> skipMany endOfLine
   num2 <- try expressionParser <|> tokenParser
-  return $ Bop Sub num1 num2
+  return $ operatorPrecedenceFix (Bop Sub num1 num2)
 
 mulParser :: Text.Parsec.Parsec String () Expression
 mulParser = do
@@ -296,7 +370,7 @@ mulParser = do
   string "*"
   spaces <|> skipMany endOfLine
   num2 <- try expressionParser <|> tokenParser
-  return $ Bop Mul num1 num2
+  return $ operatorPrecedenceFix (Bop Mul num1 num2)
 
 divParser :: Text.Parsec.Parsec String () Expression
 divParser = do
@@ -305,7 +379,7 @@ divParser = do
   string "/"
   spaces <|> skipMany endOfLine
   num2 <- try expressionParser <|> tokenParser
-  return $ Bop Div num1 num2
+  return $ operatorPrecedenceFix (Bop Div num1 num2)
 
 intLiteralParser :: Text.Parsec.Parsec String () Expression
 intLiteralParser = do
@@ -315,15 +389,29 @@ intLiteralParser = do
   -- notFollowedBy $ string "." <|> string "+"
   string " " <|> string ";"
   spaces <|> skipMany endOfLine
-  return $  Token $ Integer (read num :: Integer)
-  
-intParser :: Text.Parsec.Parsec String () Expression
-intParser = do
-  string "int"
-  spaces <|> skipMany endOfLine
-  -- Needs a noneOf $ string "."
-  num <- manyTill digit (string ";" <|> string "." <|> string " ")
   return $ Token $ Integer (read num :: Integer)
+  
+variableParser :: Text.Parsec.Parsec String () Expression
+variableParser = do
+  variableType <- many1 alphaNum
+  spaces <|> skipMany endOfLine
+  variableName <- many1 letter
+  spaces <|> skipMany endOfLine
+  try (variableDeclare variableName) <|> try (variableAssign variableName)
+  where variableDeclare :: String -> Text.Parsec.Parsec String () Expression
+        variableDeclare name = do
+          string ";"
+          return $ Uop DeclareVariable $ Token $ String name
+        variableAssign :: String -> Text.Parsec.Parsec String () Expression
+        variableAssign name = do
+          string "="
+          spaces <|> skipMany endOfLine
+          value <- try expressionParser <|> tokenParser
+          spaces <|> skipMany endOfLine
+          return $ Bop AssignVariable (Token $ String name) value
+
+
+
 
 doubleParser :: Text.Parsec.Parsec String () Expression
 doubleParser = do
