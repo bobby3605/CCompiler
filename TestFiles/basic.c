@@ -1,5 +1,6 @@
 int main() {
-  a = 3;
-  b = 4;
-  return a + b;
+  int a = 3;
+  int b = 4;
+  return 0;
 }
+void func() { return; }

@@ -4,10 +4,10 @@ import Data.Map
 import Control.Monad.State.Lazy
 
 returnCodeGen :: Expression -> State VariableMap String
-returnCodeGen expr = do
+returnCodeGen expr =
   codeGenStateHelper expr (genIns "mov" (Just "%rbp") "%rsp"
-                             ++genIns "pop" Nothing "%rbp"
-                             ++genIns "ret" Nothing "")
+                           ++genIns "pop" Nothing "%rbp"
+                           ++genIns "ret" Nothing "")
 
 
 addCodeGen :: Expression -> Expression -> State VariableMap String
@@ -38,11 +38,11 @@ divCodeGen expr1 expr2 = genCodeHelper
            ++genIns "div" Nothing "%rcx")]
 
 negationCodeGen :: Expression -> State VariableMap String
-negationCodeGen expr = do
+negationCodeGen expr =
   codeGenStateHelper expr $ genIns "neg" Nothing "%rax"
 
 bitwiseCompCodeGen :: Expression -> State VariableMap String
-bitwiseCompCodeGen expr = do
+bitwiseCompCodeGen expr =
   codeGenStateHelper expr $ genIns "not" Nothing "%rax"
 
 moduloCodeGen :: Expression -> Expression -> State VariableMap String
@@ -53,10 +53,10 @@ moduloCodeGen expr1 expr2 = genCodeHelper
            ++genIns "mov" (Just "%rdx") "%rax")]
 
 logicalNegationCodeGen :: Expression -> State VariableMap String
-logicalNegationCodeGen expr = do
+logicalNegationCodeGen expr =
   codeGenStateHelper expr (genIns "cmp" (Just "$0") "%rax"
-                           ++genIns "mov" (Just "$0") "%rax"
-                           ++genIns "sete" Nothing "%al")
+                         ++genIns "mov" (Just "$0") "%rax"
+                         ++genIns "sete" Nothing "%al")
 
 andCodeGen :: Expression -> Expression -> State VariableMap String
 andCodeGen expr1 expr2 = genCodeHelper
@@ -208,7 +208,7 @@ blankVariableMap :: VariableMap
 blankVariableMap = VariableMap empty 0
 
 addVariableToStorage :: String -> VariableMap -> VariableMap
-addVariableToStorage variableName (VariableMap inputMap stackPointer) = do
+addVariableToStorage variableName (VariableMap inputMap stackPointer) =
   if notMember variableName inputMap then
     VariableMap (insert variableName (stackPointer-8) inputMap) (stackPointer-8)
   else
@@ -245,14 +245,23 @@ generate :: Program -> String
 generate = concatMap functionGenerator
 
 functionGenerator :: Function -> String
-functionGenerator (Function returnType name arguments body) = do
+functionGenerator (Function returnType name arguments body) =
   ".globl "++name++"\n"
-   ++name++":"++"\n"
-   ++genIns "push" Nothing "%rbp"
-   ++genIns "mov" (Just "%rsp") "%rbp"
-   ++helper body blankVariableMap
+ ++name++":"++"\n"
+ ++genIns "push" Nothing "%rbp"
+ ++genIns "mov" (Just "%rsp") "%rbp"
+ ++helper body blankVariableMap
+ -- adds a return 0; statement if it doesn't exist
+ -- doing (last body) is inefficient, would be better to do this in helper on the last Expression
+ ++helper2 (last body)
    where helper :: [Expression] -> VariableMap -> String
          helper (expr:exprs) varMap =
            let (outputString,outputMap) = runState (matchCodeGen expr) varMap in
              outputString++helper exprs outputMap
          helper [] _ = ""
+         helper2 :: Expression -> String
+         helper2 (Uop Return _) = ""
+         helper2 _ = genIns "mov" (Just "$0") "$rax"
+                     ++genIns "mov" (Just "%rbp") "%rsp"
+                     ++genIns "pop" Nothing "%rbp"
+                     ++genIns "ret" Nothing ""

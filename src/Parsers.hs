@@ -334,7 +334,13 @@ returnParser :: Text.Parsec.Parsec String () Expression
 returnParser = do
   string "return"
   spaces <|> skipMany endOfLine
-  Uop Return <$> expressionParser
+  try helper <|> Uop Return <$> expressionParser
+  where
+    helper :: Text.Parsec.Parsec String () Expression
+    helper = do
+      string ";"
+      spaces <|> skipMany endOfLine
+      return $ Uop Return (Token (Integer 0))
 
 -- i don't think these respect PEMDAS
 addParser :: Text.Parsec.Parsec String () Expression
