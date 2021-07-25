@@ -1,172 +1,166 @@
 module GenCode where
 import Parsers
+import Data.Map
+import Control.Monad.State.Lazy
 
-returnCodeGen :: Expression -> String
-returnCodeGen expr =
-    matchCodeGen expr
-  ++genIns "ret" Nothing ""
+returnCodeGen :: Expression -> State VariableMap String
+returnCodeGen expr = do
+  codeGenStateHelper expr (genIns "mov" (Just "%rbp") "%rsp"
+                             ++genIns "pop" Nothing "%rbp"
+                             ++genIns "ret" Nothing "")
 
-addCodeGen :: Expression -> Expression -> String
-addCodeGen expr1 expr2 =
-  matchCodeGen expr1
-  ++genIns "push" Nothing "%rax"
-  ++matchCodeGen expr2
-  ++genIns "pop" Nothing "%rcx"
-  ++genIns "add" (Just "%rcx") "%rax"
 
-mulCodeGen :: Expression -> Expression -> String
-mulCodeGen expr1 expr2 =
-  matchCodeGen expr1
-  ++genIns "push" Nothing "%rax"
-  ++matchCodeGen expr2
-  ++genIns "pop" Nothing "%rcx"
-  --imul is signed multiplication
-  ++genIns "imul" (Just "%rcx") "%rax"
+addCodeGen :: Expression -> Expression -> State VariableMap String
+addCodeGen expr1 expr2 = genCodeHelper
+  [(expr1, genIns "push" Nothing "%rax")
+  ,(expr2, genIns "pop" Nothing "%rcx"
+           ++genIns "add" (Just "%rcx") "%rax")]
 
-subCodeGen :: Expression -> Expression -> String
-subCodeGen expr1 expr2 =
+mulCodeGen :: Expression -> Expression -> State VariableMap String
+mulCodeGen expr1 expr2 = genCodeHelper
+  [(expr1, genIns "push" Nothing "%rax")
+  ,(expr2, genIns "pop" Nothing "%rcx"
+           --imul is signed multiplication
+           ++genIns "imul" (Just "%rcx") "%rax")]
+
+subCodeGen :: Expression -> Expression -> State VariableMap String
+subCodeGen expr1 expr2 = genCodeHelper
   -- e1, e2 swapped here because sub is src, dst, dst - src, and the result is stored in dst
-  matchCodeGen expr2
-  ++genIns "push" Nothing "%rax"
-  ++matchCodeGen expr1
-  ++genIns "pop" Nothing "%rcx"
-  ++genIns "sub" (Just "%rcx") "%rax"
+  [(expr2, genIns "push" Nothing "%rax")
+  ,(expr1, genIns "pop" Nothing "%rcx"
+           ++genIns "sub" (Just "%rcx") "%rax")]
 
-divCodeGen :: Expression -> Expression -> String
-divCodeGen expr1 expr2 =
+divCodeGen :: Expression -> Expression -> State VariableMap String
+divCodeGen expr1 expr2 = genCodeHelper
   -- divides e1 by e2, stores quotient into rax
-  matchCodeGen expr2
-  ++genIns "push" Nothing "%rax"
-  ++matchCodeGen expr1
-  ++genIns "pop" Nothing "%rcx"
-  ++genIns "div" Nothing "%rcx"
+  [(expr2, genIns "push" Nothing "%rax")
+  ,(expr1, genIns "pop" Nothing "%rcx"
+           ++genIns "div" Nothing "%rcx")]
 
-negationCodeGen :: Expression -> String
-negationCodeGen expr =
-  matchCodeGen expr
-  ++genIns "neg" Nothing "%rax"
+negationCodeGen :: Expression -> State VariableMap String
+negationCodeGen expr = do
+  codeGenStateHelper expr $ genIns "neg" Nothing "%rax"
 
-bitwiseCompCodeGen :: Expression -> String
-bitwiseCompCodeGen expr =
-  matchCodeGen expr
-  ++genIns "not" Nothing "%rax"
+bitwiseCompCodeGen :: Expression -> State VariableMap String
+bitwiseCompCodeGen expr = do
+  codeGenStateHelper expr $ genIns "not" Nothing "%rax"
 
-moduloCodeGen :: Expression -> Expression -> String
-moduloCodeGen expr1 expr2 =
-  matchCodeGen expr2
-  ++genIns "mov" (Just "%rax") "%rcx"
-  ++matchCodeGen expr1
-  ++genIns "cqo" Nothing ""
-  ++genIns "idiv" Nothing "%rcx"
-  ++genIns "mov" (Just "%rdx") "%rax"
+moduloCodeGen :: Expression -> Expression -> State VariableMap String
+moduloCodeGen expr1 expr2 = genCodeHelper
+  [(expr2, genIns "mov" (Just "%rax") "%rcx")
+  ,(expr1, genIns "cqo" Nothing ""
+           ++genIns "idiv" Nothing "%rcx"
+           ++genIns "mov" (Just "%rdx") "%rax")]
 
-logicalNegationCodeGen :: Expression -> String
-logicalNegationCodeGen expr =
-  matchCodeGen expr
-  ++genIns "cmp" (Just "$0") "%rax"
-  ++genIns "mov" (Just "$0") "%rax"
-  ++genIns "sete" Nothing "%al"
+logicalNegationCodeGen :: Expression -> State VariableMap String
+logicalNegationCodeGen expr = do
+  codeGenStateHelper expr (genIns "cmp" (Just "$0") "%rax"
+                           ++genIns "mov" (Just "$0") "%rax"
+                           ++genIns "sete" Nothing "%al")
 
-andCodeGen :: Expression -> Expression -> String
-andCodeGen expr1 expr2 =
-    matchCodeGen expr1
-  ++genIns "cmp" (Just "$0") "%rax"
-  ++genIns "jne" Nothing "_andClause"
-  ++genIns "jmp" Nothing "_andClauseEnd"
-  ++"_andClause:"++"\n"
-  ++matchCodeGen expr2
-  ++genIns "cmp" (Just "$0") "%rax"
-  ++genIns "mov" (Just "$0") "%rax"
-  ++genIns "setne" Nothing "%al"
-  ++"_andClauseEnd:"++"\n"
+andCodeGen :: Expression -> Expression -> State VariableMap String
+andCodeGen expr1 expr2 = genCodeHelper
+  [(expr1, genIns "cmp" (Just "$0") "%rax"
+           ++genIns "jne" Nothing "_andClause"
+           ++genIns "jmp" Nothing "_andClauseEnd"
+           ++"_andClause:"++"\n")
+  ,(expr2, genIns "cmp" (Just "$0") "%rax"
+           ++genIns "mov" (Just "$0") "%rax"
+           ++genIns "setne" Nothing "%al"
+           ++"_andClauseEnd:"++"\n")]
 
-orCodeGen :: Expression -> Expression -> String
-orCodeGen expr1 expr2 =
-  matchCodeGen expr1
-  ++genIns "cmp" (Just "$0") "%rax"
-  ++genIns "je" Nothing "_orClause"
-  ++genIns "mov" (Just "$1") "%rax"
-  ++genIns "jmp" Nothing "_orClauseEnd"
-  ++"_orClause:"++"\n"
-  ++matchCodeGen expr2
-  ++genIns "cmp" (Just "$0") "%rax"
-  ++genIns "mov" (Just "$0") "%rax"
-  ++genIns "setne" Nothing "%al"
-  ++"_orClauseEnd:"++"\n"
+orCodeGen :: Expression -> Expression -> State VariableMap String
+orCodeGen expr1 expr2 = genCodeHelper
+  [(expr1, genIns "cmp" (Just "$0") "%rax"
+           ++genIns "je" Nothing "_orClause"
+           ++genIns "mov" (Just "$1") "%rax"
+           ++genIns "jmp" Nothing "_orClauseEnd"
+           ++"_orClause:"++"\n")
+  ,(expr2, genIns "cmp" (Just "$0") "%rax"
+           ++genIns "mov" (Just "$0") "%rax"
+           ++genIns "setne" Nothing "%al"
+           ++"_orClauseEnd:"++"\n")]
 
-equalityChecksCodeGen :: Expression -> Expression -> String -> String
-equalityChecksCodeGen expr1 expr2 ins =
-    matchCodeGen expr1
-  ++genIns "push" Nothing "%rax"
-  ++matchCodeGen expr2
-  ++genIns "pop" Nothing "%rcx"
-  ++genIns "cmp" (Just "%eax") "%ecx"
-  ++genIns "mov" (Just "$0") "%eax"
-  ++genIns ins Nothing "%al"
+equalityChecksCodeGen :: Expression -> Expression -> String -> State VariableMap String
+equalityChecksCodeGen expr1 expr2 ins = genCodeHelper
+    [(expr1, genIns "push" Nothing "%rax")
+    ,(expr2, genIns "pop" Nothing "%rcx"
+             ++genIns "cmp" (Just "%eax") "%ecx"
+             ++genIns "mov" (Just "$0") "%eax"
+             ++genIns ins Nothing "%al")]
 
-equalCodeGen :: Expression -> Expression -> String
+equalCodeGen :: Expression -> Expression -> State VariableMap String
 equalCodeGen expr1 expr2 = equalityChecksCodeGen expr1 expr2 "sete"
 
-notEqualCodeGen :: Expression -> Expression -> String
+notEqualCodeGen :: Expression -> Expression -> State VariableMap String
 notEqualCodeGen expr1 expr2 = equalityChecksCodeGen expr1 expr2 "setne"
 
-lessThanCodeGen :: Expression -> Expression -> String
+lessThanCodeGen :: Expression -> Expression -> State VariableMap String
 lessThanCodeGen expr1 expr2 = equalityChecksCodeGen expr1 expr2 "setl"
 
-lessThanOrEqualCodeGen :: Expression -> Expression -> String
+lessThanOrEqualCodeGen :: Expression -> Expression -> State VariableMap String
 lessThanOrEqualCodeGen expr1 expr2 = equalityChecksCodeGen expr1 expr2 "setle"
 
-greaterThanCodeGen :: Expression -> Expression -> String
+greaterThanCodeGen :: Expression -> Expression -> State VariableMap String
 greaterThanCodeGen expr1 expr2 = equalityChecksCodeGen expr1 expr2 "setg"
 
-greaterThanOrEqualCodeGen :: Expression -> Expression -> String
+greaterThanOrEqualCodeGen :: Expression -> Expression -> State VariableMap String
 greaterThanOrEqualCodeGen expr1 expr2 = equalityChecksCodeGen expr1 expr2 "setge"
 
-bitwiseAndCodeGen :: Expression -> Expression -> String
-bitwiseAndCodeGen expr1 expr2=
-  matchCodeGen expr1
-  ++genIns "mov" (Just "%rax") "%rcx"
-  ++matchCodeGen expr2
-  ++genIns "and" (Just "%rcx") "%rax"
+bitwiseBopCodeGen :: Expression  -> Expression -> String -> State VariableMap String
+bitwiseBopCodeGen expr1 expr2 ins = genCodeHelper
+  [(expr1, genIns "mov" (Just "%rax") "%rcx")
+  ,(expr2, genIns ins (Just "%rcx") "%rax")]
 
-bitwiseOrCodeGen :: Expression -> Expression -> String
-bitwiseOrCodeGen expr1 expr2=
-  matchCodeGen expr1
-  ++genIns "mov" (Just "%rax") "%rcx"
-  ++matchCodeGen expr2
-  ++genIns "or" (Just "%rcx") "%rax"
+bitwiseAndCodeGen :: Expression -> Expression -> State VariableMap String
+bitwiseAndCodeGen expr1 expr2 = bitwiseBopCodeGen expr1 expr2 "and"
 
-bitwiseXorCodeGen :: Expression -> Expression -> String
-bitwiseXorCodeGen expr1 expr2=
-  matchCodeGen expr1
-  ++genIns "mov" (Just "%rax") "%rcx"
-  ++matchCodeGen expr2
-  ++genIns "xor" (Just "%rcx") "%rax"
+bitwiseOrCodeGen :: Expression -> Expression -> State VariableMap String
+bitwiseOrCodeGen expr1 expr2 = bitwiseBopCodeGen expr1 expr2 "or"
 
-bitwiseShiftLeftCodeGen :: Expression -> Expression -> String
-bitwiseShiftLeftCodeGen expr1 expr2=
-  matchCodeGen expr1
-  ++genIns "mov" (Just "%rax") "%rcx"
-  ++matchCodeGen expr2
-  ++genIns "shl" (Just "%rcx") "%rax"
+bitwiseXorCodeGen :: Expression -> Expression -> State VariableMap String
+bitwiseXorCodeGen expr1 expr2 = bitwiseBopCodeGen expr1 expr2 "xor"
 
-bitwiseShiftRightCodeGen :: Expression -> Expression -> String
-bitwiseShiftRightCodeGen expr1 expr2=
-  matchCodeGen expr1
-  ++genIns "mov" (Just "%rax") "%rcx"
-  ++matchCodeGen expr2
-  ++genIns "shr" (Just "%rcx") "%rax"
+bitwiseShiftLeftCodeGen :: Expression -> Expression -> State VariableMap String
+bitwiseShiftLeftCodeGen expr1 expr2 = bitwiseBopCodeGen expr1 expr2 "shl"
 
-{--
-matchCodeGen :: Expression -> String
-matchCodeGen expr =
-  case matchCodeGen expr of
-    Right s -> genIns "mov" (Just ("$"++s)) "%rax"
-    Left s -> s
--}
+bitwiseShiftRightCodeGen :: Expression -> Expression -> State VariableMap String
+bitwiseShiftRightCodeGen expr1 expr2 = bitwiseBopCodeGen expr1 expr2 "shr"
 
-tokenIntCodeGen :: Integer -> String
-tokenIntCodeGen int = genIns "mov" (Just $ "$"++show int) "%rax"
+tokenIntCodeGen :: Integer -> State VariableMap String
+tokenIntCodeGen int = return $ genIns "mov" (Just $ "$"++show int) "%rax"
+
+-- int a = 1;a=2;
+-- int a;a=2;
+-- a = 1; this should fail because not declared
+
+-- needs to add to storage
+declareVariableCodeGen :: String -> String -> Maybe Expression -> State VariableMap String
+declareVariableCodeGen varName varType maybeValue = do
+  inputMap <- get
+  case maybeValue of
+    Just expr -> do
+      let (outputString,outputMap) = runState (matchCodeGen expr) inputMap in
+        do
+          put $ addVariableToStorage varName outputMap
+          return $ outputString++genIns "push" Nothing "%rax"
+    Nothing -> do
+      put $ addVariableToStorage varName inputMap
+      return $ genIns "push" Nothing "$0"
+
+assignVariableCodeGen :: String -> Expression -> State VariableMap String
+assignVariableCodeGen varName varValue = do
+  inputMap <- get
+  case getVariableLocation varName inputMap of
+    Just varLocation -> codeGenStateHelper varValue $ genIns "mov" (Just "%rax") (show varLocation++"%rbp")
+    Nothing -> return $ error "Variable not found: " ++ varName
+
+getVariableCodeGen :: String -> State VariableMap String
+getVariableCodeGen varName = do
+  inputMap <- get
+  case getVariableLocation varName inputMap of
+      Just varLocation -> return $ genIns "mov" (Just (show varLocation++"(%rbp)")) "%rax"
+      Nothing -> return $ error "Variable not found: " ++ varName
 
 genIns :: String -> Maybe String -> String -> String
 genIns ins (Just src) dst = beginspaces++ins++"    "++src++", "++dst++"\n"
@@ -175,40 +169,90 @@ genIns ins Nothing dst = beginspaces++ins++"    "++dst++"\n"
 beginspaces :: String
 beginspaces = "         "
 
-matchCodeGen :: Expression -> String
-matchCodeGen (Uop Return expr) = returnCodeGen expr
-matchCodeGen (Token (Integer a)) = tokenIntCodeGen a
-matchCodeGen (Token (Double a)) = show a -- unimplemented
-matchCodeGen (Token (Float a)) = show a -- unimplemented
-matchCodeGen (Token (String a)) = show a -- unimplemented
-matchCodeGen (Token (Char a)) = show a -- unimplemented
-matchCodeGen (Bop Add e1 e2) = addCodeGen e1 e2
-matchCodeGen (Bop Sub e1 e2) = subCodeGen e1 e2
-matchCodeGen (Bop Mul e1 e2) = mulCodeGen e1 e2
-matchCodeGen (Bop Div e1 e2) = divCodeGen e1 e2
-matchCodeGen (Uop Negation expr) = negationCodeGen expr
-matchCodeGen (Uop LogicalNegation expr) = logicalNegationCodeGen expr
-matchCodeGen (Uop BitwiseComp expr) = bitwiseCompCodeGen expr
-matchCodeGen (Bop Modulo expr1 expr2) = moduloCodeGen expr1 expr2
-matchCodeGen (Bop BitwiseAnd expr1 expr2) = bitwiseAndCodeGen expr1 expr2
-matchCodeGen (Bop BitwiseOr expr1 expr2) = bitwiseOrCodeGen expr1 expr2
-matchCodeGen (Bop BitwiseXor expr1 expr2) = bitwiseXorCodeGen expr1 expr2
-matchCodeGen (Bop BitwiseShiftLeft expr1 expr2) = bitwiseShiftLeftCodeGen expr1 expr2
-matchCodeGen (Bop BitwiseShiftRight expr1 expr2) = bitwiseShiftRightCodeGen expr1 expr2
-matchCodeGen (Bop And expr expr2) = andCodeGen expr expr2
-matchCodeGen (Bop Or expr expr2) = orCodeGen expr expr2
-matchCodeGen (Bop Equal expr expr2) = equalCodeGen expr expr2
-matchCodeGen (Bop NotEqual expr expr2) = notEqualCodeGen expr expr2
-matchCodeGen (Bop LessThan expr expr2) = lessThanCodeGen expr expr2
-matchCodeGen (Bop LessThanOrEqual expr expr2) = lessThanOrEqualCodeGen expr expr2
-matchCodeGen (Bop GreaterThan expr expr2) = greaterThanCodeGen expr expr2
-matchCodeGen (Bop GreaterThanOrEqual expr expr2) = greaterThanOrEqualCodeGen expr expr2
+matchCodeGen :: Expression -> State VariableMap String
+matchCodeGen (Uop Return expr) = stateRunner (returnCodeGen expr) Nothing
+matchCodeGen (Token (Integer a))  = stateRunner (tokenIntCodeGen a) Nothing
+matchCodeGen (Token (Double a))  = return (show a) -- unimplemented
+matchCodeGen (Token (Float a))  = return (show a)-- unimplemented
+matchCodeGen (Token (String a))  = return (show a) -- unimplemented
+matchCodeGen (Token (Char a))  = return (show a) -- unimplemented
+matchCodeGen (Bop Add e1 e2)  = stateRunner (addCodeGen e1 e2) Nothing
+matchCodeGen (Bop Sub e1 e2)  = stateRunner (subCodeGen e1 e2) Nothing
+matchCodeGen (Bop Mul e1 e2)  = stateRunner (mulCodeGen e1 e2) Nothing
+matchCodeGen (Bop Div e1 e2)  = stateRunner (divCodeGen e1 e2) Nothing
+matchCodeGen (Uop Negation expr)  = stateRunner (negationCodeGen expr) Nothing
+matchCodeGen (Uop LogicalNegation expr)  = stateRunner (logicalNegationCodeGen expr) Nothing
+matchCodeGen (Uop BitwiseComp expr)  = stateRunner (bitwiseCompCodeGen expr) Nothing
+matchCodeGen (Bop Modulo expr1 expr2)  = stateRunner (moduloCodeGen expr1 expr2) Nothing
+matchCodeGen (Bop BitwiseAnd expr1 expr2)  = stateRunner (bitwiseAndCodeGen expr1 expr2) Nothing
+matchCodeGen (Bop BitwiseOr expr1 expr2)  = stateRunner (bitwiseOrCodeGen expr1 expr2) Nothing
+matchCodeGen (Bop BitwiseXor expr1 expr2)  = stateRunner (bitwiseXorCodeGen expr1 expr2) Nothing
+matchCodeGen (Bop BitwiseShiftLeft expr1 expr2)  = stateRunner (bitwiseShiftLeftCodeGen expr1 expr2) Nothing
+matchCodeGen (Bop BitwiseShiftRight expr1 expr2)  = stateRunner (bitwiseShiftRightCodeGen expr1 expr2) Nothing
+matchCodeGen (Bop And expr expr2)  = stateRunner (andCodeGen expr expr2) Nothing
+matchCodeGen (Bop Or expr expr2)  = stateRunner (orCodeGen expr expr2) Nothing
+matchCodeGen (Bop Equal expr expr2)  = stateRunner (equalCodeGen expr expr2) Nothing
+matchCodeGen (Bop NotEqual expr expr2)  = stateRunner (notEqualCodeGen expr expr2) Nothing
+matchCodeGen (Bop LessThan expr expr2)  = stateRunner (lessThanCodeGen expr expr2) Nothing
+matchCodeGen (Bop LessThanOrEqual expr expr2)  = stateRunner (lessThanOrEqualCodeGen expr expr2) Nothing
+matchCodeGen (Bop GreaterThan expr expr2)  = stateRunner (greaterThanCodeGen expr expr2) Nothing
+matchCodeGen (Bop GreaterThanOrEqual expr expr2)  = stateRunner (greaterThanOrEqualCodeGen expr expr2) Nothing
+matchCodeGen (DeclareVariable varName varType Nothing)  = stateRunner (declareVariableCodeGen varName varType Nothing) Nothing
+matchCodeGen (DeclareVariable varName varType varValue)  = stateRunner (declareVariableCodeGen varName varType varValue) Nothing
+matchCodeGen (AssignVariable varName varValue)  = stateRunner (assignVariableCodeGen varName varValue) Nothing
+matchCodeGen (Token (Variable varName varType))  = stateRunner (getVariableCodeGen varName) Nothing
+
+data VariableMap = VariableMap (Map String Integer) Integer
+
+blankVariableMap :: VariableMap
+blankVariableMap = VariableMap empty 0
+
+addVariableToStorage :: String -> VariableMap -> VariableMap
+addVariableToStorage variableName (VariableMap inputMap stackPointer) = do
+  if notMember variableName inputMap then
+    VariableMap (insert variableName (stackPointer-8) inputMap) (stackPointer-8)
+  else
+    VariableMap inputMap stackPointer
+
+getVariableLocation :: String -> VariableMap -> Maybe Integer
+getVariableLocation variableName (VariableMap inputMap _) = Data.Map.lookup variableName inputMap
+
+codeGenStateHelper :: Expression -> String -> State VariableMap String
+codeGenStateHelper expr string = stateRunner (matchCodeGen expr) (Just string)
+
+stateRunner :: State VariableMap String -> Maybe String -> State VariableMap String
+stateRunner inputFunc appendString = do
+  inputMap <- get
+  let (outputString,outputMap) = runState inputFunc inputMap in
+    do
+      put outputMap
+      case appendString of
+        Just string -> return $ outputString++string
+        Nothing -> return outputString
+
+-- Feeds state and result from one StateT into the next
+genCodeHelper :: [(Expression,String)] -> State VariableMap String
+genCodeHelper l = helper l ""
+  where helper :: [(Expression,String)] -> String -> State VariableMap String
+        helper ((expr,inputString):xs) acc =
+          do
+            inputMap <- get
+            let (outputString,outputMap) = runState (codeGenStateHelper expr inputString) inputMap in
+              helper xs (acc++outputString)
+        helper [] acc = return acc
 
 generate :: Program -> String
 generate = concatMap functionGenerator
 
 functionGenerator :: Function -> String
-functionGenerator (Function returnType name arguments body) =
-    ".globl "++name++"\n"
-  ++name++":"++"\n"
-  ++concatMap matchCodeGen body
+functionGenerator (Function returnType name arguments body) = do
+  ".globl "++name++"\n"
+   ++name++":"++"\n"
+   ++genIns "push" Nothing "%rbp"
+   ++genIns "mov" (Just "%rsp") "%rbp"
+   ++helper body blankVariableMap
+   where helper :: [Expression] -> VariableMap -> String
+         helper (expr:exprs) varMap =
+           let (outputString,outputMap) = runState (matchCodeGen expr) varMap in
+             outputString++helper exprs outputMap
+         helper [] _ = ""

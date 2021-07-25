@@ -29,7 +29,6 @@ data Bop =
   | BitwiseXor
   | BitwiseShiftLeft
   | BitwiseShiftRight
-  | AssignVariable
   deriving (Show)
 
 data Uop =
@@ -37,7 +36,6 @@ data Uop =
   | Negation
   | LogicalNegation
   | BitwiseComp
-  | DeclareVariable
   deriving (Show)
 
 data Token =
@@ -46,16 +44,19 @@ data Token =
   | Float Float
   | Char Char
   | String String
-  | Variable String
+  | Variable String String
   deriving (Show)
 
 data Expression =
     Bop Bop Expression Expression
   | Uop Uop Expression
   | Token Token
+  | DeclareVariable String String (Maybe Expression)
+  | AssignVariable String Expression
   deriving (Show)
 
-precedenceOfOperator :: Expression -> Integer
+
+precedenceOfOperator :: Expression -> Float
 precedenceOfOperator (Uop Negation _)             = 0
 precedenceOfOperator (Uop BitwiseComp _)          = 0
 precedenceOfOperator (Uop LogicalNegation _)      = 0
@@ -64,11 +65,11 @@ precedenceOfOperator (Token (Double _))           = 1
 precedenceOfOperator (Token (Float _))            = 1
 precedenceOfOperator (Token (String _))           = 1
 precedenceOfOperator (Token (Char _))             = 1
-precedenceOfOperator (Token (Variable _))         = 1
+precedenceOfOperator (Token (Variable _ _))       = 1
 precedenceOfOperator (Bop Add _ _)                = 2
 precedenceOfOperator (Bop Sub _ _)                = 2
-precedenceOfOperator (Bop Mul _ _)                = 2
-precedenceOfOperator (Bop Div _ _)                = 2
+precedenceOfOperator (Bop Mul _ _)                = 2.5
+precedenceOfOperator (Bop Div _ _)                = 2.5
 precedenceOfOperator (Bop And _ _)                = 3
 precedenceOfOperator (Bop Or _ _)                 = 3
 precedenceOfOperator (Bop Equal _ _)              = 3
@@ -83,15 +84,15 @@ precedenceOfOperator (Bop BitwiseOr _ _)          = 4
 precedenceOfOperator (Bop BitwiseXor _ _)         = 4
 precedenceOfOperator (Bop BitwiseShiftLeft _ _)   = 4
 precedenceOfOperator (Bop BitwiseShiftRight _ _)  = 4
-precedenceOfOperator (Uop DeclareVariable _)      = 0
-precedenceOfOperator (Bop AssignVariable _ _)     = 9
+precedenceOfOperator DeclareVariable {}      = 9
+precedenceOfOperator AssignVariable {}     = 9
 precedenceOfOperator (Uop Return _)               = 10
 
 parseInput :: String -> Either ParseError Program
 parseInput = parse programParser ""
 
 programParser :: Text.Parsec.Parsec String () Program
-programParser = do
+programParser =
   many1 functionParser
 
 functionParser :: Text.Parsec.Parsec String () Function
@@ -153,12 +154,21 @@ expressionParser = do
   <|> try bitwiseShiftLeftParser
   <|> try bitwiseShiftRightParser
   <|> try variableParser
-  <|> intLiteralParser
+  <|> tokenParser
 
 tokenParser :: Text.Parsec.Parsec String () Expression
-tokenParser = do
-  intLiteralParser
+tokenParser =
+  try intLiteralParser
+  <|> variableTokenParser
   -- <|> parenthesesParser
+
+variableTokenParser :: Text.Parsec.Parsec String () Expression
+variableTokenParser = do
+  varName <- many1 alphaNum
+  skipMany endOfLine
+  string " " <|> string ";"
+  spaces <|> skipMany endOfLine
+  return $ Token $ Variable varName ""
 
 andParser :: Text.Parsec.Parsec String () Expression
 andParser = do
@@ -314,18 +324,17 @@ endParser :: Text.Parsec.Parsec String () Expression
 endParser = do
   string "}"
   return $ Token $ String ""
-  
+
 emptyParser :: Text.Parsec.Parsec String () Expression
 emptyParser = do
   notFollowedBy anyToken
   return $ Token $ String ""
-  
+
 returnParser :: Text.Parsec.Parsec String () Expression
 returnParser = do
   string "return"
   spaces <|> skipMany endOfLine
-  returnExpression <- expressionParser
-  return $ Uop Return returnExpression
+  Uop Return <$> expressionParser
 
 -- i don't think these respect PEMDAS
 addParser :: Text.Parsec.Parsec String () Expression
@@ -390,28 +399,44 @@ intLiteralParser = do
   string " " <|> string ";"
   spaces <|> skipMany endOfLine
   return $ Token $ Integer (read num :: Integer)
-  
+
 variableParser :: Text.Parsec.Parsec String () Expression
-variableParser = do
-  variableType <- many1 alphaNum
-  spaces <|> skipMany endOfLine
-  variableName <- many1 letter
-  spaces <|> skipMany endOfLine
-  try (variableDeclare variableName) <|> try (variableAssign variableName)
-  where variableDeclare :: String -> Text.Parsec.Parsec String () Expression
-        variableDeclare name = do
+variableParser =
+  try variableDeclare <|> try variableAssignAndDeclare
+  where variableDeclare :: Text.Parsec.Parsec String () Expression
+  -- int a; declare
+  -- declareCodeGen with Nothing
+        variableDeclare = do
+          variableType <- many1 letter
+          spaces <|> skipMany endOfLine
+          variableName <- many1 letter
+          spaces <|> skipMany endOfLine
           string ";"
-          return $ Uop DeclareVariable $ Token $ String name
-        variableAssign :: String -> Text.Parsec.Parsec String () Expression
-        variableAssign name = do
+          return $ DeclareVariable variableName variableType Nothing
+        variableAssignAndDeclare :: Text.Parsec.Parsec String () Expression
+  -- int a = 1; assign and declare
+  -- declareCodeGen with (Just value)
+        variableAssignAndDeclare = do
+          variableType <- many1 letter
+          spaces <|> skipMany endOfLine
+          variableName <- many1 letter
+          spaces <|> skipMany endOfLine
           string "="
           spaces <|> skipMany endOfLine
           value <- try expressionParser <|> tokenParser
           spaces <|> skipMany endOfLine
-          return $ Bop AssignVariable (Token $ String name) value
-
-
-
+          return $ DeclareVariable variableName variableType (Just value)
+        variableAssign :: Text.Parsec.Parsec String () Expression
+  -- a = 1; assign
+  -- assignCodeGen
+        variableAssign = do
+          variableName <- many1 letter
+          spaces <|> skipMany endOfLine
+          string "="
+          spaces <|> skipMany endOfLine
+          value <- try expressionParser <|> tokenParser
+          spaces <|> skipMany endOfLine
+          return $ AssignVariable variableName value
 
 doubleParser :: Text.Parsec.Parsec String () Expression
 doubleParser = do
@@ -439,5 +464,4 @@ stringParser = do
 charParser :: Text.Parsec.Parsec String () Expression
 charParser = do
   oneOf "'"
-  c <- anyToken
-  return $ Token $ Char c
+  Token . Char <$> anyToken
